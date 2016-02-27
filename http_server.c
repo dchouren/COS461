@@ -14,6 +14,7 @@
 // #define PORT "3490"  // the port users will be connecting to
 
 #define BACKLOG 10     // how many pending connections queue will hold
+#define MAXDATASIZE 400
 
 
 char *badReqMsg   = "<html><head>\r\b<title>400 Bad Request</title>\r\n"\
@@ -53,6 +54,7 @@ int main(int argc, char * argv[])
 {
 
     port = *argv[1]
+    char buf[MAXDATASIZE];
 
     int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
@@ -134,13 +136,46 @@ int main(int argc, char * argv[])
 
         if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
-            if (send(new_fd, "Hello, world!", 13, 0) == -1)
-                perror("send");
-            close(new_fd);
-            exit(0);
+
+            req = ParsedRequest_create();
+
+            // try to parse and send badreqmsg if bad request
+            if (ParsedRequest_parse_server(req, buf, len) != 0) {
+                send(new_fd, badReqMsg, strlen(badReqMsg), 0);
+                return -1;
+            }
+
+            printf("Method:%s\n", req->method);
+            printf("Protocol:%s\n", req->protocol);
+            printf("Host:%s\n", req->host);
+            printf("Path:%s\n", req->path);
+            printf("Version:%s\n", req->version);
+
+            file = fopen(req->path+1, 'rb');
+
+
+            // if (send(new_fd, "Hello, world!", 13, 0) == -1)
+            //     perror("send");
+            // close(new_fd);
+            // exit(0);
         }
         close(new_fd);  // parent doesn't need this
     }
 
 	return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
