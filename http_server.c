@@ -10,24 +10,27 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include 'proxy_parse.h'
 
-// #define PORT "3490"  // the port users will be connecting to
+//gcc http_server.c proxy_parse.c -o http_server;./http_server
+
+// #define PORT '3490'  // the port users will be connecting to
 
 #define BACKLOG 10     // how many pending connections queue will hold
 #define MAXDATASIZE 400
 
 
-char *badReqMsg   = "<html><head>\r\b<title>400 Bad Request</title>\r\n"\
-	            "</head><body>\r\n<h1>Bad Request</h1>\r\n"\
-	             "</body></html>\r\n";
+char *badReqMsg   = '<html><head>\r\b<title>400 Bad Request</title>\r\n'\
+	            '</head><body>\r\n<h1>Bad Request</h1>\r\n'\
+	             '</body></html>\r\n';
 
-char *notFoundMsg = "<html><head>\r\b<title>404 Not Found</title>\r\n"\
-	            "</head><body>\r\n<h1>Not Found</h1>\r\n"\
-	            "</body></html>\r\n";
+char *notFoundMsg = '<html><head>\r\b<title>404 Not Found</title>\r\n'\
+	            '</head><body>\r\n<h1>Not Found</h1>\r\n'\
+	            '</body></html>\r\n';
 
-char *notImpMsg   = "<html><head>\r\b<title>501 Not Implemented</title>\r\n"\
-	            "</head><body>\r\n<h1>Not Found</h1>\r\n"\
-	            "</body></html>\r\n";
+char *notImpMsg   = '<html><head>\r\b<title>501 Not Implemented</title>\r\n'\
+	            '</head><body>\r\n<h1>Not Found</h1>\r\n'\
+	            '</body></html>\r\n';
 
 void sigchld_handler(int s)
 {
@@ -53,8 +56,12 @@ void *get_in_addr(struct sockaddr *sa)
 int main(int argc, char * argv[])
 {
 
-    port = *argv[1]
+    char* port = argv[1];
     char buf[MAXDATASIZE];
+    FILE *file;
+    long fsize;
+    char *version;
+    int numbytes;
 
     int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
@@ -65,13 +72,16 @@ int main(int argc, char * argv[])
     char s[INET6_ADDRSTRLEN];
     int rv;
 
+    struct ParsedRequest *req;
+    int len;
+
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
 
     if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        fprintf(stderr, 'getaddrinfo: %s\n', gai_strerror(rv));
         return 1;
     }
 
@@ -79,19 +89,19 @@ int main(int argc, char * argv[])
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
-            perror("server: socket");
+            perror('server: socket');
             continue;
         }
 
         if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
                 sizeof(int)) == -1) {
-            perror("setsockopt");
+            perror('setsockopt');
             exit(1);
         }
 
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("server: bind");
+            perror('server: bind');
             continue;
         }
 
@@ -102,12 +112,12 @@ int main(int argc, char * argv[])
     freeaddrinfo(servinfo); // all done with this structure
 
     if (p == NULL)  {
-        fprintf(stderr, "server: failed to bind\n");
+        fprintf(stderr, 'server: failed to bind\n');
         exit(1);
     }
 
     if (listen(sockfd, BACKLOG) == -1) {
-        perror("listen");
+        perror('listen');
         exit(1);
     }
 
@@ -115,27 +125,36 @@ int main(int argc, char * argv[])
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-        perror("sigaction");
+        perror('sigaction');
         exit(1);
     }
 
-    printf("server: waiting for connections...\n");
+    printf('server: waiting for connections...\n');
 
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
         if (new_fd == -1) {
-            perror("accept");
+            perror('accept');
             continue;
         }
 
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s);
-        printf("server: got connection from %s\n", s);
+        printf('server: got connection from %s\n', s);
 
         if (!fork()) { // this is the child process
-            close(sockfd); // child doesn't need the listener
+            // close(sockfd); // child doesn't need the listener
+            if ((numbytes = recv(new_fd, buf, MAXDATASIZE-1, 0)) == -1) {
+                 perror('recv');
+                 exit(1);
+               }
+
+            req = ParsedRequest_create();
+
+
+            printf('server: received: '%s'\n', buf);
 
             req = ParsedRequest_create();
 
@@ -145,17 +164,47 @@ int main(int argc, char * argv[])
                 return -1;
             }
 
-            printf("Method:%s\n", req->method);
-            printf("Protocol:%s\n", req->protocol);
-            printf("Host:%s\n", req->host);
-            printf("Path:%s\n", req->path);
-            printf("Version:%s\n", req->version);
-
-            file = fopen(req->path+1, 'rb');
+            // printf('Method:%s\n', req->method);
+            // printf('Protocol:%s\n', req->protocol);
+            // printf('Host:%s\n', req->host);
+            // printf('Path:%s\n', req->path);
+            // printf('Version:%s\n', req->version);
 
 
-            // if (send(new_fd, "Hello, world!", 13, 0) == -1)
-            //     perror("send");
+            // read the file into a file buffer
+            filep = fopen(req->path+1, 'rb');
+
+            char *file_buffer = 0;
+            if (filep){
+                fseek (filep, 0, SEEK_END);
+                length = ftell (filep);
+                fseek (filep, 0, SEEK_SET);
+                file_buffer = malloc (length);
+                if (file_buffer)
+                {
+                fread (file_buffer, 1, length, filep);
+                }
+                fclose (filep);
+            }
+
+            strcpy(response, 'HTTP/1.0 200 OK\r\n\0');
+            strcpy(response + strlen(response), 'Connection: close\r\n\0');
+            strcpy(response + strlen(response), 'Content-Length: \r\n\0');  // TODO: get length
+            strcpy(response + strlen(response), 'Content-Type: \r\n\0');
+            strcpy(response + strlen(response), '\r\n\r\n\0');
+
+            strcpy(response + strlen(response), file_buffer);
+
+            printf('server: sending back: '%s'\n', response);
+
+            send(new_fd, response, strlen(response), 0);
+
+            ParsedRequest_destroy(req);
+
+            // close(sockdf);
+
+            // if (send(new_fd, 'Hello, world!', 13, 0) == -1)
+            //     perror('send');
             // close(new_fd);
             // exit(0);
         }
