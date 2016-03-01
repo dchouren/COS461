@@ -216,15 +216,16 @@ int main(int argc, char * argv[])
             // TODO: need to figure out what file type
             char header[1000];
             char * file_type;
+            char * status_line = "figure out how to get status";
 
             sprintf(header, 
             "%s\r\n"
             "Connection: close\r\n"
             "Content-Length: %i\r\n"
             "Content-Type: %s\r\n"
-            "\r\n", status_line, fileLen, file_type);
+            "\r\n", status_line, fileLength, file_type);
 
-            responseLength = fileLength + strlen(header);
+            int responseLength = fileLength + strlen(header);
 
             // create response from header and file
             char * response = (char*)malloc(responseLength);
