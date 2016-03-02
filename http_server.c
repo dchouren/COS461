@@ -203,7 +203,7 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
   // TODO: need to figure out what file type
   // find file type
   char * file_type;
-  char content_type[10];
+  char file_type[10];
 
   char header[1000];
   // char * file_type;
@@ -214,7 +214,7 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
     "Connection: close\r\n"
     "Content-Length: %i\r\n"
     "Content-Type: %s\r\n"
-    "\r\n", status_line, fileLength, content_type);
+    "\r\n", status_line, fileLength, file_type);
   // printf("Connection: close\r\n"
   //   "Content-Length: %i\r\n"
   //   "Content-Type: %s\r\n"
