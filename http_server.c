@@ -20,16 +20,16 @@
 
 
 char *badReqMsg   = "<html><head>\r\b<title>400 Bad Request</title>\r\n"\
-	            "</head><body>\r\n<h1>Bad Request</h1>\r\n"\
-	             "</body></html>\r\n";
+              "</head><body>\r\n<h1>Bad Request</h1>\r\n"\
+               "</body></html>\r\n";
 
 char *notFoundMsg = "<html><head>\r\b<title>404 Not Found</title>\r\n"\
-	            "</head><body>\r\n<h1>Not Found</h1>\r\n"\
-	            "</body></html>\r\n";
+              "</head><body>\r\n<h1>Not Found</h1>\r\n"\
+              "</body></html>\r\n";
 
 char *notImpMsg   = "<html><head>\r\b<title>501 Not Implemented</title>\r\n"\
-	            "</head><body>\r\n<h1>Not Found</h1>\r\n"\
-	            "</body></html>\r\n";
+              "</head><body>\r\n<h1>Not Found</h1>\r\n"\
+              "</body></html>\r\n";
 
 void sigchld_handler(int s)
 {
@@ -83,13 +83,13 @@ int create_listen_socket(char* port)
   for(p = servinfo; p != NULL; p = p->ai_next) {
 
     if ((sockfd = socket(p->ai_family, p->ai_socktype,
-			 p->ai_protocol)) == -1) {
+       p->ai_protocol)) == -1) {
       perror("server: socket");
       continue;
     }
     
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-		   sizeof(int)) == -1) {
+       sizeof(int)) == -1) {
       perror("setsockopt");
       exit(1);
     }
@@ -167,7 +167,14 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
   int fileLength;
   
   // Open file 
-  file = fopen(req->path + 1, "rb"); // remove open slash
+  printf("\nPath:%s\n", req->path);
+  // if path is "/" then we want to serve index.html
+  if (strcmp(req->path, "/") == 0) {
+    file = fopen("index.html", "rb");
+  }
+  else {
+    file = fopen(req->path + 1, "rb"); // remove open slash
+  }
   if (!file) {
     perror("cant find file");
     return -1;
@@ -196,11 +203,11 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
   char * status_line = "figure out how to get status";
   
   sprintf(header, 
-	  "%s\r\n"
-	  "Connection: close\r\n"
-	  "Content-Length: %i\r\n"
-	  "Content-Type: %s\r\n"
-	  "\r\n", status_line, fileLength, file_type);
+    "%s\r\n"
+    "Connection: close\r\n"
+    "Content-Length: %i\r\n"
+    "Content-Type: %s\r\n"
+    "\r\n", status_line, fileLength, file_type);
   
   int responseLength = fileLength + strlen(header);
   
@@ -266,10 +273,11 @@ int process_request(sock_fd)
   ParsedRequest_destroy(req);
   return 0;
 } 
-	
+  
 int main(int argc, char * argv[])
 {
 
+    printf("\n");
   char* port = argv[1]; // Port to listen on
   char s[INET6_ADDRSTRLEN];
 
@@ -313,10 +321,10 @@ int main(int argc, char * argv[])
     }
     
     inet_ntop(their_addr.ss_family,
-	      get_in_addr((struct sockaddr *)&their_addr),
-	      s, sizeof s);
+        get_in_addr((struct sockaddr *)&their_addr),
+        s, sizeof s);
 
-    printf("server: got connection from %s\n", s);
+    printf("\n\nserver: got connection from %s\n", s);
     fflush(stdout); // (just making sure!)
 
     /* Child process */
@@ -327,9 +335,9 @@ int main(int argc, char * argv[])
       
       /* Call process_request method */
       if (process_request(new_fd) == -1) {
-	perror("Error processing request");	
-	close(new_fd);
-	exit(EXIT_FAILURE);
+        perror("Error processing request"); 
+        close(new_fd);
+        exit(EXIT_FAILURE);
       }
 
       /* Close new_fd and exit with success status */
