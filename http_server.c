@@ -116,53 +116,57 @@ int create_listen_socket(char* port)
   return sockfd;
 }
 
-
-int process_request(new_fd) 
+/*
+ * Load the entire request from new_fd into buf by calling recv() repeatedly 
+ * until either 1) recv() throws an error, 2) the client closes the connection,
+ * or 3) the buffer contains the request-terminating string "\r\n\r\n". If 
+ * successful, returns the number of bytes loaded in to buf. If there is an 
+ * error, returns -1.
+ */
+int recv_request(int sock_fd, char* buf) 
 {
-  
-  char buf[BUFMAX]; // Buffer to store incoming data 
+  int n_recv; // number of bytes received in one call to recv()
+  int n_bytes; // total number of bytes that have been received so far
 
-  int buflen; // Number of bytes loaded in to buffer
+  n_bytes = 0;
 
-  struct ParsedRequest *req;
-  //struct ParsedHeader *header;
+  /* recv() loop */
+  while(1) {
 
-  /* Receive data from client and read it in to buffer */
-  if ((buflen = recv(new_fd, buf, BUFMAX - 1, 0)) == -1) {
-    perror("receiving error");
-    return(-1);
-  }
-  
-  printf("server: received: '%s'\n", buf);
-  
-  req = ParsedRequest_create();
-  
-  // try to parse and send badreqmsg if bad request
-  if (ParsedRequest_parse_server(req, buf, buflen) != 0) {
-    // send(new_fd, badReqMsg, strlen(badReqMsg), 0);
-    perror("parse failed");
-    return -1;
-  }
+    /* Receive data from client and read it in to buffer */    
+    n_recv = recv(sock_fd, (buf + n_bytes), (BUFMAX - n_bytes - 1), 0);
 
-  /* If parse is successful, print out data */
-  printf("Method:%s\n", req->method);
-  printf("Protocol:%s\n", req->protocol);
-  printf("Host:%s\n", req->host);
-  printf("Path:%s\n", req->path);
-  printf("Version:%s\n", req->version);
+    /* recv() returns error */
+    if (n_recv == -1) {
+      return(-1);
+    }
+    
+    /* Client closes connection */
+    if (n_recv == 0){
+      break;
+    }
 
-  if (strcmp(req->version, "HTTP/1.0") != 0) {
-    perror("wrong version");
-    ParsedRequest_destroy(req);
-    return -1;
-  }
+    n_bytes += n_recv;
+
+    /* Make buffer null-terminated for strstr call */
+    buf[n_bytes] = '\0';
+
+    /* Buffer contains "\r\n\r\n" */
+    if (strstr(buf, "\r\n\r\n") != NULL) {
+      break;
+    }
+  } 
   
-  // READ FILE
+  return n_bytes;
+}
+
+int serve_request(int sock_fd, struct ParsedRequest* req)
+{
   FILE *file;
   char *buffer;
   int fileLength;
   
-  // Open file
+  // Open file 
   file = fopen(req->path + 1, "rb"); // remove open slash
   if (!file) {
     perror("cant find file");
@@ -205,20 +209,63 @@ int process_request(new_fd)
   strcpy(response, header);
   memcpy(response+strlen(header), buffer, fileLength);
   
-  // send header and file through HTTP
-  send(new_fd, response, responseLength, 0);
+  // TODO: write send() loop here
+  send(sock_fd, response, responseLength, 0);
   
-  printf("here");
+  return 0;
+}
+
+/* This is the function called by the child process */
+int process_request(sock_fd) 
+{
+  char buf[BUFMAX]; // Buffer to store incoming data
+  int buflen;
+  struct ParsedRequest* req; // Stores parsed request data
   
-  /* Call destroy on any ParsedRequests that you create 
-   * once you are done using them. This will free memory 
-   * dynamically allocated by the proxy_parse library. */
+  /* Read request from sock_fd into buffer using recv() */
+  if ((buflen = recv_request(sock_fd, buf)) == -1) {
+    perror("receiving error");
+    return -1;
+  }
+
+  printf("server: received: '%s'\n", buf);
+  
+  /* Create empty ParsedRequest instance */
+  req = ParsedRequest_create();
+  
+  /* Try to parse request in buf; send badReqMsg if request is invalid */
+  if (ParsedRequest_parse_server(req, buf, buflen) != 0) {
+    send(sock_fd, badReqMsg, strlen(badReqMsg), 0);
+    perror("parse failed");
+    ParsedRequest_destroy(req);
+    return -1;
+  }
+
+  /* If parse is successful, print out parsed data */
+  printf("Method:%s\n", req->method);
+  printf("Protocol:%s\n", req->protocol);
+  printf("Host:%s\n", req->host);
+  printf("Path:%s\n", req->path);
+  printf("Version:%s\n", req->version);
+
+  /* If request is not HTTP/1.0, return error */
+  if (strcmp(req->version, "HTTP/1.0") != 0) {
+    perror("wrong version");
+    ParsedRequest_destroy(req);
+    return -1;
+  }
+
+  /* Serve request using data in req */
+  if (serve_request(sock_fd, req) != 0) {
+    perror("error serving request");
+    ParsedRequest_destroy(req);
+    return -1;
+  }
+  
+  /* If we reach this point, processing of request was successful */
   ParsedRequest_destroy(req);
-  
-  /* Return success status */
   return 0;
 } 
- 
 	
 int main(int argc, char * argv[])
 {
