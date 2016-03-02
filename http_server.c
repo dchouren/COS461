@@ -176,9 +176,11 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
     file = fopen(req->path + 1, "rb"); // remove open slash
   }
   if (!file) {
+    printf("can't find file");
     perror("cant find file");
     return -1;
   }
+  printf("found file\n");
   
   // Get file length
   fseek(file, 0, SEEK_END);
@@ -196,28 +198,42 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
   // store file in buffer
   fread(buffer, fileLength, 1, file);
   fclose(file);
+  printf("file in buffer. file closed\n");
   
   // TODO: need to figure out what file type
-  char header[1000];
+  // find file type
   char * file_type;
-  char * status_line = "figure out how to get status";
+  char content_type[10];
+
+  char header[1000];
+  // char * file_type;
+  char * status_line = "HTTP/1.0 200 OK";
   
   sprintf(header, 
     "%s\r\n"
     "Connection: close\r\n"
     "Content-Length: %i\r\n"
     "Content-Type: %s\r\n"
-    "\r\n", status_line, fileLength, file_type);
-  
+    "\r\n", status_line, fileLength, content_type);
+  // printf("Connection: close\r\n"
+  //   "Content-Length: %i\r\n"
+  //   "Content-Type: %s\r\n"
+  //   "\r\n", status_line, fileLength, content_type);
+
   int responseLength = fileLength + strlen(header);
   
   // create response from header and file
   char * response = (char*)malloc(responseLength);
   strcpy(response, header);
   memcpy(response+strlen(header), buffer, fileLength);
+
+  printf("created response\n");
   
   // TODO: write send() loop here
   send(sock_fd, response, responseLength, 0);
+
+  printf("sent response\n");
+  free(buffer);
   
   return 0;
 }
@@ -269,6 +285,7 @@ int process_request(sock_fd)
     return -1;
   }
   
+  printf("successful process\n");
   /* If we reach this point, processing of request was successful */
   ParsedRequest_destroy(req);
   return 0;
@@ -277,7 +294,7 @@ int process_request(sock_fd)
 int main(int argc, char * argv[])
 {
 
-    printf("\n");
+  printf("\n");
   char* port = argv[1]; // Port to listen on
   char s[INET6_ADDRSTRLEN];
 
