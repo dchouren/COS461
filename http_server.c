@@ -17,6 +17,7 @@
 
 #define BACKLOG 10     // how many pending connections queue will hold
 #define BUFMAX 4096   // max number of bytes we can hold (4kb)
+#define MAX_NUM_PROCESSES 10 // Maximum number of child processes alive at any time
 
 
 char *badReqMsg   = "<html><head>\r\b<title>400 Bad Request</title>\r\n"\
@@ -31,12 +32,14 @@ char *notImpMsg   = "<html><head>\r\b<title>501 Not Implemented</title>\r\n"\
               "</head><body>\r\n<h1>Not Found</h1>\r\n"\
               "</body></html>\r\n";
 
+int num_child_processes = 0; // Number of currently active child processes 
+
 void sigchld_handler(int s)
 {
-    // waitpid() might overwrite errno, so we save and restore it:
     int saved_errno = errno;
-
-    while(waitpid(-1, NULL, WNOHANG) > 0);
+    while(waitpid(-1, NULL, WNOHANG) > 0) {
+      num_child_processes--; // Update count of child processes
+    }
 
     errno = saved_errno;
 }
@@ -338,6 +341,8 @@ int main(int argc, char * argv[])
   int sockfd; // socket to listen on
   int new_fd;  // socket for new connections
 
+  pid_t frk_val; // return value of fork() function
+
   struct sigaction sa;
 
   /* Connector's address information */
@@ -367,6 +372,11 @@ int main(int argc, char * argv[])
   /* Main accept() loop */  
   while(1) {  
     
+    /* Don't accept any new connections if we have too many active
+     * chile processes */
+    if(num_child_processes > MAX_NUM_PROCESSES)
+      continue;
+
     /* Accept new connection */
     new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
     if (new_fd == -1) {
@@ -374,6 +384,7 @@ int main(int argc, char * argv[])
       continue;
     }
     
+    /* Is this part necessary?*/
     inet_ntop(their_addr.ss_family,
         get_in_addr((struct sockaddr *)&their_addr),
         s, sizeof s);
@@ -381,9 +392,11 @@ int main(int argc, char * argv[])
     printf("\n\nserver: got connection from %s\n", s);
     fflush(stdout); // (just making sure!)
 
-    /* Child process */
-    if (fork() == 0) { 
+    /* Spawn new child process */
+    frk_val = fork();
 
+    /* Child process */
+    if (frk_val == 0) { 
       /* Close listener socket -- child doesn't need this */
       close(sockfd);
       
@@ -399,10 +412,15 @@ int main(int argc, char * argv[])
       exit(EXIT_SUCCESS);
     }
 
-    /* Parent process */
-    else { 
-      /* Close new_fd and return to beginning of loop */
+    /* Parent process */    
+    else if (frk_val > 0) {
+      num_child_processes++; // increment running count 
       close(new_fd); 
+    }
+    
+    /* Child process failed to spawn */
+    else { 
+      close(new_fd);
     }
   }
   
