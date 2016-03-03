@@ -214,7 +214,7 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
     "Connection: close\r\n"
     "Content-Length: %i\r\n"
     "Content-Type: %s\r\n"
-    "\r\n", status_line, fileLength, file_type);
+    "\r\n\0", status_line, fileLength, file_type);
   // printf("Connection: close\r\n"
   //   "Content-Length: %i\r\n"
   //   "Content-Type: %s\r\n"
@@ -234,6 +234,7 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
 
   printf("sent response\n");
   free(buffer);
+  free(response);
   
   return 0;
 }
