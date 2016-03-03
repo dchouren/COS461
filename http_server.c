@@ -160,23 +160,72 @@ int recv_request(int sock_fd, char* buf)
   return n_bytes;
 }
 
+
 int serve_request(int sock_fd, struct ParsedRequest* req)
 {
+
+  // only allow GET requests
+  if (strcmp(req->method, "GET") != 0) {
+    send(sock_fd, notImpMsg, strlen(notImpMsg), 0);
+    return -1;
+  }
+  
+  char* path = malloc(1 + strlen(req->path));
+  printf("%s\n", req->path);
+  fflush(stdout);
+  strcpy(path, req->path);
+  printf("%s\n", path);
+  fflush(stdout);
+  
+  // find file type
+  char * extension;
+  char file_type[10];
+  strtok_r(req->path, ".", &extension);
+
+  if (strcmp(extension, "html") == 0 || strcmp(req->path, "/") == 0) {
+    strcpy(file_type, "text/html");
+  }
+  else if (strcmp(extension, "txt") == 0) {
+    strcpy(file_type, "text/plain");
+  }
+  else if (strcmp(extension, "css") == 0) {
+    strcpy(file_type, "text/css");
+  }
+  else if (strcmp(extension, "gif") == 0) {
+    strcpy(file_type, "image/gif");
+  }
+  else if (strcmp(extension, "jpeg") == 0 || strcmp(extension, "jpg") == 0) {
+    strcpy(file_type, "image/jpeg");
+  }
+  else {
+    send(sock_fd, badReqMsg, strlen(badReqMsg), 0);
+    return -1;
+  }
+
+
+  // now we look for the file
   FILE *file;
   char *buffer;
   int fileLength;
-  
+
   // Open file 
-  printf("\nPath:%s\n", req->path);
   // if path is "/" then we want to serve index.html
-  if (strcmp(req->path, "/") == 0) {
+  if (strcmp(path, "/") == 0) {
     file = fopen("index.html", "rb");
   }
   else {
-    file = fopen(req->path + 1, "rb"); // remove open slash
+    file = fopen(path + 1, "r"); // remove open slash
   }
+  printf("%s", path + 1);
+  fflush(stdout);
+
   if (!file) {
-    perror("can't find file");
+    if (errno == ENOENT) {  // file not found
+      send(sock_fd, notFoundMsg, strlen(notFoundMsg), 0);
+    }
+    else {
+      send(sock_fd, badReqMsg, strlen(badReqMsg), 0);
+    }
     return -1;
   }
   
@@ -196,11 +245,9 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
   // store file in buffer
   fread(buffer, fileLength, 1, file);
   fclose(file);
-  
-  // TODO: need to figure out what file type
-  // find file type
-  char * file_type = "\0";
-  char header[1000];
+
+
+  char header[1024];
   char * status_line = "HTTP/1.0 200 OK";
   sprintf(header, 
     "%s\r\n"
@@ -209,7 +256,7 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
     "Content-Type: %s\r\n"
     "\r\n", status_line, fileLength, file_type);
 
-  int responseLength = fileLength + strlen(header);\
+  int responseLength = fileLength + strlen(header);
 
 
   // create response from header and file
@@ -223,6 +270,7 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
 
   free(buffer);
   free(response);
+  free(path);
   
   return 0;
 }
