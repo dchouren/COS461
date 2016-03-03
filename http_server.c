@@ -203,7 +203,7 @@ int serve_request(int sock_fd, struct ParsedRequest* req)
   // TODO: need to figure out what file type
   // find file type
   char * file_type;
-  char file_type[10];
+  // char file_type[10];
 
   char header[1000];
   // char * file_type;
