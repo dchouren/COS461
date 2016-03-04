@@ -29,10 +29,13 @@ func handleConnection(old_conn net.Conn) {
     request, error := http.ReadRequest(bufio.NewReader(old_conn))
     if error != nil {
         // TODO: send 400 error
+        println("read request error")
+        fmt.Println(error)
         os.Exit(1)
     }
     if request.Method != "GET" {
         // TODO: send 501 error
+        println("not get error")
         os.Exit(1)
     }
     url := request.URL
@@ -47,6 +50,7 @@ func handleConnection(old_conn net.Conn) {
     new_conn, error := net.Dial("tcp", host)
     if error != nil {
         // handle error
+        println("new connection error")
         os.Exit(1)
     }
     defer new_conn.Close()
@@ -57,8 +61,8 @@ func handleConnection(old_conn net.Conn) {
     // get_buffer.WriteString(path)
     // get_buffer.WriteString(" HTTP/1.0\r\n")
     new_conn.Write([]byte("GET " + path + " HTTP/1.0\r\n"))
-    request.Header.Add("Connection", "close")
-    request.Header.Add("Host", host)
+    request.Header.Set("Connection", "close")
+    request.Header.Set("Host", host)
 
     request.Header.Write(new_conn)
     new_conn.Write([]byte("\r\n\r\n"))
@@ -91,6 +95,7 @@ func main() {
             // handle error
         }
         go handleConnection(conn)
+        // conn.Close()
     }
 }
 
