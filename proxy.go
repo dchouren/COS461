@@ -27,8 +27,6 @@ func send_500_status(conn net.Conn) {
 
 }
 
-
-
 func handleConnection(cn_client net.Conn) {
 
     defer cn_client.Close()
@@ -62,11 +60,21 @@ func handleConnection(cn_client net.Conn) {
 
     defer cn_server.Close()
 
-    /* Parse requested path from request */
+    /* Parse requested URI from request */
     path := request.URL.Path
-
+    query := request.URL.RawQuery
+    frag := request.URL.Fragment
+    if query != "" {
+        query = "?" + query
+    }
+    if frag != "" {
+        frag = "#" + frag
+    }
+    
+    uri := path + query + frag
+    
     /* Send request line to server */
-    _, err = cn_server.Write([]byte("GET " + path + " HTTP/1.0\r\n"))
+    _, err = cn_server.Write([]byte("GET " + uri + " HTTP/1.0\r\n"))
     if err != nil {
         send_500_status(cn_client)
         fmt.Println(err)
@@ -75,7 +83,7 @@ func handleConnection(cn_client net.Conn) {
     
     /* Modify headers from request and send to server */
     request.Header.Set("Connection", "close")
-    request.Header.Set("Host", host)
+    request.Header.Set("Host", request.URL.Host)
     request.Header.Write(cn_server)
 
     /* Send terminating 4 bytes to server */
