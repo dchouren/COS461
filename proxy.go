@@ -19,98 +19,106 @@ func usage() {
 }
 
 
-func handleConnection(old_conn net.Conn) {
+func send_500_status(conn net.Conn) {
 
-    println("here")
+    response_line := "HTTP/1.0 500 Internal Server Error\r\n"
+    header := "Connection: closed\r\n\r\n"
+    conn.Write([]byte(response_line + header))
 
-    defer old_conn.Close()
+}
 
-    // read request
-    request, error := http.ReadRequest(bufio.NewReader(old_conn))
-    if error != nil {
-        // TODO: send 400 error
-        println("read request error")
-        fmt.Println(error)
-        os.Exit(1)
+
+
+func handleConnection(cn_client net.Conn) {
+
+    defer cn_client.Close()
+    
+    /* Parse request from client connection */
+    request, err := http.ReadRequest(bufio.NewReader(cn_client))
+    if err != nil {
+        send_500_status(cn_client)
+        return
     }
+
     if request.Method != "GET" {
-        // TODO: send 501 error
-        println("not get error")
-        os.Exit(1)
+        send_500_status(cn_client)
+        return        
     }
-    url := request.URL
-    path := url.Path
+    
+    /* Parse destination host string from request */
     host := request.URL.Host
 
+    /* If host string doesn't contain port, set port to 80 */
     if (!strings.Contains(host, ":")) {
         host += ":80"
     }
-
-    // open connection
-    new_conn, error := net.Dial("tcp", host)
-    if error != nil {
-        // handle error
-        println("new connection error")
-        os.Exit(1)
+   
+    /* Connect to server */   
+    cn_server, err := net.Dial("tcp", host)
+    if err != nil {
+        send_500_status(cn_client)
+        return
     }
-    defer new_conn.Close()
 
-    //send new request
-    // var get_buffer bytes.Buffer
-    // get_buffer.WriteString("GET ")
-    // get_buffer.WriteString(path)
-    // get_buffer.WriteString(" HTTP/1.0\r\n")
-    new_conn.Write([]byte("GET " + path + " HTTP/1.0\r\n"))
+    defer cn_server.Close()
+
+    /* Parse requested path from request */
+    path := request.URL.Path
+
+    /* Send request line to server */
+    _, err = cn_server.Write([]byte("GET " + path + " HTTP/1.0\r\n"))
+    if err != nil {
+        send_500_status(cn_client)
+        fmt.Println(err)
+        return
+    }
+    
+    /* Modify headers from request and send to server */
     request.Header.Set("Connection", "close")
     request.Header.Set("Host", host)
+    request.Header.Write(cn_server)
 
-    request.Header.Write(new_conn)
-    new_conn.Write([]byte("\r\n\r\n"))
+    /* Send terminating 4 bytes to server */
+    cn_server.Write([]byte("\r\n\r\n"))
 
-    // read response
+    /* Read response from server into buffer */
     var buf bytes.Buffer
-    io.Copy(&buf, new_conn)
-    buf.WriteTo(old_conn)
+    io.Copy(&buf, cn_server)
 
+    /* Send response from server to client */
+    buf.WriteTo(cn_client)
 }
 
 func main() {
+
     if len(os.Args) != 2 {
         usage()
     }
+
+
+    /* Format port string */
     var port string = ":" + os.Args[1]
 
-    tcp_address, err := net.ResolveTCPAddr("tcp", port)
+    /* Create Listener */
+    ln, err := net.Listen("tcp", port)
     if err != nil {
-        // handle error
+        panic(err)
     }
 
-    ln, err := net.ListenTCP("tcp", tcp_address)
-    if err != nil {
-        // handle error
-    }
+    /* Accept loop */
     for {
+
+        /* Accept new connection */
         conn, err := ln.Accept()
         if err != nil {
-            // handle error
+            panic(err)
         }
+
+        /* Spawn goroutine to handle connection */
         go handleConnection(conn)
-        // conn.Close()
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
+ 
 
 
 
